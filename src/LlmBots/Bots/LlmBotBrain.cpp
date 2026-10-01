@@ -1,5 +1,13 @@
 /*
  * This file is part of the LLM bots feature of mod-playerbots (AzerothCore).
+ *
+ * Modified in mod-playerbots-llm-commander:
+ * Commander-specific action tools and response handling.
+ * Modified version published on 2026-10-01.
+ * Modification notice added on 2026-10-01.
+ *
+ * Based on bigr00/mod-llm-playerbots.
+ * Original copyright and license notices remain in effect.
  */
 
 #include "LlmBotBrain.h"
