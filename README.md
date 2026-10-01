@@ -40,8 +40,197 @@ registering prepared statements would mean patching the core's
 Clone this fork into `modules/mod-playerbots`, **not** `modules/mod-llm-playerbots`:
 
 ```bash
-git clone https://github.com/bigr00/mod-llm-playerbots.git modules/mod-playerbots
+git clone https://github.com/gsehun811-cloud/mod-playerbots-llm-commander.git modules/mod-playerbots
 ```
+
+### Project origins and Commander additions
+
+This project builds on
+[bigr00/mod-llm-playerbots](https://github.com/bigr00/mod-llm-playerbots),
+which adds LLM integration to
+[mod-playerbots](https://github.com/mod-playerbots/mod-playerbots).
+
+Credit for the original Playerbots engine and LLM integration belongs to
+their respective authors and contributors. Existing copyright notices and
+the GPL v2 license are retained.
+
+This fork adds owner-authorized Commander tools, natural-language Playerbot
+control, temporary raid-role registration, and Altbot raid preparation.
+Use this fork's clone command above to obtain these additions.
+
+### Required Playerbot core
+
+Use the Playerbot branch of the Playerbots core, not standard AzerothCore.
+For a fresh checkout:
+
+```bash
+git clone --branch Playerbot https://github.com/mod-playerbots/azerothcore-wotlk.git
+cd azerothcore-wotlk
+git clone https://github.com/gsehun811-cloud/mod-playerbots-llm-commander.git modules/mod-playerbots
+```
+
+This repository already contains the Playerbots module. Do not install
+another copy alongside it.
+
+Follow the upstream
+[Installation Guide](https://github.com/mod-playerbots/mod-playerbots/wiki/Installation-Guide)
+for dependencies, databases, client data, CMake, and building.
+When following its module-clone step, use this fork's URL.
+
+### Windows native installation checklist
+
+1. Set `CMAKE_INSTALL_PREFIX` explicitly before building the install target,
+   for example `C:/az/azerothcore-wotlk/out/install/x64-Release`.
+   A default path under `Program Files (x86)` can cause permission errors.
+2. Supply compatible `maps`, `vmaps`, `mmaps`, and `dbc` data.
+3. Copy installed `.conf.dist` templates to active `.conf` files if the
+   destination files do not already exist:
+
+   | Installed template | Active config |
+   |---|---|
+   | `configs/authserver.conf.dist` | `configs/authserver.conf` |
+   | `configs/worldserver.conf.dist` | `configs/worldserver.conf` |
+   | `configs/modules/playerbots.conf.dist` | `configs/modules/playerbots.conf` |
+   | `configs/modules/mod_llm_bots.conf.dist` | `configs/modules/mod_llm_bots.conf` |
+
+4. Configure database connections before starting the servers.
+5. Run the executables from the installed server directory so normal
+   relative config paths resolve.
+
+If runtime DLLs are missing, use the matching x64 dependencies for your
+build. Our Windows test required `libmysql.dll`, `libcrypto-3-x64.dll`,
+and OpenSSL's `legacy.dll` beside the executables.
+In that installation, `legacy.dll` was available under
+`C:\Program Files\OpenSSL-Win64\bin`.
+Dependency versions and installation paths can differ.
+
+### Keep test databases separate
+
+A different installation folder does not isolate MySQL databases.
+
+When testing on a PC that already runs a server, create separate databases,
+for example `aztest_auth`, `aztest_world`, `aztest_characters`, and
+`aztest_playerbots`, and grant the database user access.
+
+Update these connection settings:
+
+- `LoginDatabaseInfo` in both server configs.
+- `WorldDatabaseInfo` and `CharacterDatabaseInfo` in `worldserver.conf`.
+- `PlayerbotsDatabaseInfo` in `playerbots.conf`.
+
+If both servers run simultaneously, configure distinct ports and appropriate
+realm details too. Do not point a fresh test at the production databases.
+
+### Windows API key setup
+
+In the active `configs/modules/mod_llm_bots.conf`, configure:
+
+```ini
+LlmBots.Enable = 1
+LlmBots.Provider = openai
+LlmBots.Openai.ApiKey =
+LlmBots.Openai.ModelFast = YOUR_AVAILABLE_MODEL_ID
+LlmBots.Openai.ModelThink = YOUR_AVAILABLE_MODEL_ID
+```
+
+Replace model placeholders with API model IDs available to your account
+and compatible with the provider's structured-output and tool-calling
+requests. Do not leave placeholders in an active configuration.
+
+In Windows Command Prompt:
+
+```cmd
+setx AC_LLM_BOTS_OPENAI_API_KEY "YOUR_NEW_API_KEY"
+```
+
+Close the current Command Prompt, open a new one, and restart `worldserver`
+from the new prompt. `setx` does not update an already running prompt or
+server process.
+
+Check that the variable exists without displaying the secret:
+
+```cmd
+if defined AC_LLM_BOTS_OPENAI_API_KEY (echo API key variable is set) else (echo API key variable is missing)
+```
+
+`AC_LLM_BOTS_OPENAI_API_KEY` overrides `LlmBots.Openai.ApiKey` in the config.
+`OPENAI_API_KEY` is a different variable and is not the setting this module
+reads. Other `AC_LLM_BOTS_*` environment settings also override their
+corresponding config values.
+
+Important clarification for the `env.llm` instructions elsewhere in this
+README: creating `conf/env.llm` alone does not load it into a native Windows
+process. Use the environment-variable method above, or an explicit launcher
+that imports the file. Docker can load it through Compose `env_file:`.
+If a launcher imports the file, check how it handles existing variables.
+
+Never commit a populated `env.llm` file or an API key.
+
+### Commander first-run steps
+
+1. Create a Commander character on a non-random account and make it
+   available as an owned Altbot to the controlling player. Configure
+   account-bot access or account linking as needed.
+2. Add these settings to the active `mod_llm_bots.conf`:
+
+   ```ini
+   LlmBots.Commander.Name = CM
+   LlmBots.Commander.AccountId = 0
+   ```
+
+   Replace `CM` with your chosen character name. Replace `0` with the
+   controlling human player's numeric `account.id`, not a login name.
+   This is not necessarily the account holding the Commander character.
+   Leaving the value at `0` leaves owner authorization unconfigured.
+
+   To find the ID, run this query against your authentication database:
+
+   ```sql
+   SELECT id, username FROM account WHERE username = 'YOUR_LOGIN_NAME';
+   ```
+
+3. Restart `worldserver` after changing the settings.
+4. Log in as the controlling GM character and run:
+
+   ```text
+   .playerbots bot add CM
+   .llmbot add CM
+   .llmbot list
+   /w CM Hello.
+   .llmbot stats
+   ```
+
+Replace `CM` in every command with your configured character name.
+Logging in a Playerbot and registering it in the LLM roster are separate
+steps. Ordinary LLM companions also need to be online and registered.
+
+All `.llmbot` commands above are in-game GM commands. They are not available
+in the `AC>` server console. `.llmbot reload` reloads roster and personas;
+it does not replace a restart after changing environment variables.
+
+### Troubleshooting
+
+| Symptom | Check |
+|---|---|
+| Cannot open `configs/authserver.conf` | Copy the template to its active name and check the working directory. |
+| Cannot find `legacy.dll` | Check the matching OpenSSL runtime/provider files. |
+| `llmbot stats` does not exist in `AC>` | Use `.llmbot stats` in game as a GM. |
+| Calls/errors/fallbacks increase but tokens stay at zero | Inspect the provider error in `Server.log`. |
+| HTTP 401 / incorrect API key | Replace the variable inherited by worldserver and restart from a new CMD. |
+| CM does not respond | Check enablement, online bot status, roster, name, owner ID, models, cooldowns, and budgets. |
+| Progression scripts have no code | Check for database content from a module missing from this build. |
+
+Statistics accumulate during the process lifetime. Compare values before
+and after a new request rather than requiring earlier errors to disappear.
+
+### Autogear clarification
+
+`AiPlayerbot.AutoGearScoreLimit` limits item level. It does not by itself
+guarantee vanilla-only item sources or a specific dungeon/raid loot set.
+
+`AiPlayerbot.AutoGearQualityLimit` also applies. The shipped default is `3`
+(rare); `4` allows epic quality. Choose both settings for your progression
+and inspect the resulting equipment.
 
 AzerothCore derives both the script-loader function name
 (`Addmod_playerbotsScripts`) and the CMake hook file name
